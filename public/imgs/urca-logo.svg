@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
+  <!-- Background -->
+  <rect width="200" height="60" fill="#FFFFFF"/>
+
+  <!-- URCA stylized text logo -->
+  <text x="10" y="42" font-family="Arial, sans-serif" font-weight="bold" font-size="32" fill="#0066CC">URCA</text>
+
+  <!-- Underline accent -->
+  <rect x="10" y="48" width="80" height="4" fill="#0066CC"/>
+
+  <!-- University indicator -->
+  <text x="100" y="35" font-family="Arial, sans-serif" font-size="9" fill="#333333">Université de Reims</text>
+  <text x="100" y="47" font-family="Arial, sans-serif" font-size="9" fill="#333333">Champagne Ardenne</text>
+
+  <!-- Green accent strip -->
+  <rect x="180" y="0" width="20" height="60" fill="#00AA44"/>
+</svg>
