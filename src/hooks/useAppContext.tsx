@@ -1,185 +1,173 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { Site, Item, AppState, CategoryType, calculateCarbonValue, PREDEFINED_SITES } from '../lib/types';
+import { createContext, useContext, useReducer, ReactNode, useCallback } from 'react';
+import { 
+  Item, 
+  Site, 
+  AppState, 
+  AppAction, 
+  appReducer, 
+  initialState,
+  ADEME_FACTORS,
+  getCategoryLabel,
+  calculateCarbonFootprint 
+} from '../lib/types';
 import * as Storage from '../lib/storage';
 
-// Action types
-type Action =
-  | { type: 'SET_SITE'; payload: Site }
-  | { type: 'START_SESSION' }
-  | { type: 'END_SESSION' }
-  | { type: 'ADD_ITEM'; payload: Omit<Item, 'id' | 'timestamp'> }
-  | { type: 'DELETE_ITEM'; payload: string }
-  | { type: 'LOAD_ITEMS'; payload: Item[] }
-  | { type: 'LOAD_SITE'; payload: Site | null };
-
-// Initial state
-const initialState: AppState = {
-  currentSite: null,
-  items: [],
-  isSessionActive: false,
-};
-
-// Reducer function
-function appReducer(state: AppState, action: Action): AppState {
-  switch (action.type) {
-    case 'SET_SITE':
-      Storage.saveCurrentSite(action.payload);
-      return { ...state, currentSite: action.payload };
-
-    case 'START_SESSION':
-      return { ...state, isSessionActive: true };
-
-    case 'END_SESSION':
-      return { ...state, isSessionActive: false };
-
-    case 'ADD_ITEM': {
-      const newItem: Item = {
-        ...action.payload,
-        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-      };
-      Storage.addItem(newItem);
-      return { ...state, items: [...state.items, newItem] };
-    }
-
-    case 'DELETE_ITEM': {
-      Storage.deleteItem(action.payload);
-      const filteredItems = state.items.filter(item => item.id !== action.payload);
-      return { ...state, items: filteredItems };
-    }
-
-    case 'LOAD_ITEMS':
-      return { ...state, items: action.payload };
-
-    case 'LOAD_SITE':
-      return { ...state, currentSite: action.payload };
-
-    default:
-      return state;
-  }
-}
-
-// Context type
+// Context type definition
 interface AppContextType {
   state: AppState;
-  dispatch: React.Dispatch<Action>;
-  addItem: (category: CategoryType, name: string, quantity: number, photoUri: string | null) => void;
+  dispatch: React.Dispatch<AppAction>;
+  
+  // Item management
+  addItem: (item: Omit<Item, 'id' | 'timestamp' | 'carbonValue'>) => void;
   deleteItem: (itemId: string) => void;
-  setSite: (site: Site) => void;
-  startSession: () => void;
-  endSession: () => void;
   getItemsForCurrentSite: () => Item[];
-  getStatistics: () => ReturnType<typeof Storage.getStatistics>;
+  
+  // Site management
+  currentSite: Site | null;
+  setCurrentSite: (site: Site) => void;
+  
+  // Session management
+  startSession: (site: Site) => void;
+  endSession: () => void;
+  
+  // Statistics
+  getStatistics: () => {
+    totalItems: number;
+    totalCarbon: number;
+    averageCarbonPerItem: number;
+    byCategory: Record<string, { count: number; carbon: number }>;
+  };
+  
+  // Export functions
   generateCSVExport: () => string;
   generateExcelExport: () => string;
+  generateDetailedExcelExport: () => string;
+  exportToCSV: (filename?: string) => void;
+  exportToDetailedExcel: (filename?: string) => void;
+  
+  // Utility
+  clearAllData: () => void;
 }
 
-// Create context
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Provider component
-interface AppProviderProps {
-  children: ReactNode;
-}
-
-export function AppProvider({ children }: AppProviderProps) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
-
-  // Load saved data on mount
-  useEffect(() => {
-    const savedSite = Storage.getCurrentSite();
-    const savedItems = Storage.getAllItems();
-
-    if (savedSite) {
-      dispatch({ type: 'LOAD_SITE', payload: savedSite });
-    }
-    dispatch({ type: 'LOAD_ITEMS', payload: savedItems });
-  }, []);
-
-  // Add item action
-  const addItem = (category: CategoryType, name: string, quantity: number, photoUri: string | null) => {
-    if (!state.currentSite) {
-      alert('Veuillez sélectionner un site d\'abord');
-      return;
-    }
-
-    const carbonValue = calculateCarbonValue(category, quantity);
-    const itemData = {
-      siteId: state.currentSite.id,
-      photoUri,
-      category,
-      name,
-      quantity,
+  
+  // Load initial state from storage
+  const currentSite = Storage.getCurrentSite();
+  
+  // Item management
+  const addItem = useCallback((itemData: Omit<Item, 'id' | 'timestamp' | 'carbonValue'>) => {
+    const carbonValue = calculateCarbonFootprint(itemData.category, itemData.quantity);
+    const newItem: Item = {
+      ...itemData,
+      id: Storage.generateId(),
+      timestamp: Date.now(),
       carbonValue,
-      calculationMethod: 'ADEME - Base Empreinte',
     };
-
-    dispatch({ type: 'ADD_ITEM', payload: itemData });
-  };
-
-  // Delete item action
-  const deleteItem = (itemId: string) => {
+    Storage.addItem(newItem);
+    dispatch({ type: 'ADD_ITEM', payload: newItem });
+  }, []);
+  
+  const deleteItem = useCallback((itemId: string) => {
+    Storage.deleteItem(itemId);
     dispatch({ type: 'DELETE_ITEM', payload: itemId });
-  };
-
-  // Set site action
-  const setSite = (site: Site) => {
+  }, []);
+  
+  const getItemsForCurrentSite = useCallback((): Item[] => {
+    if (!currentSite) return [];
+    return Storage.getItemsBySite(currentSite.id);
+  }, [currentSite]);
+  
+  // Site management
+  const setCurrentSite = useCallback((site: Site) => {
+    Storage.setCurrentSite(site);
     dispatch({ type: 'SET_SITE', payload: site });
-  };
-
-  // Start session
-  const startSession = () => {
-    dispatch({ type: 'START_SESSION' });
-  };
-
-  // End session
-  const endSession = () => {
+  }, []);
+  
+  // Session management
+  const startSession = useCallback((site: Site) => {
+    Storage.setCurrentSite(site);
+    dispatch({ type: 'START_SESSION', payload: site });
+  }, []);
+  
+  const endSession = useCallback(() => {
     dispatch({ type: 'END_SESSION' });
-  };
-
-  // Get items for current site
-  const getItemsForCurrentSite = (): Item[] => {
-    if (!state.currentSite) return [];
-    return state.items.filter(item => item.siteId === state.currentSite!.id);
-  };
-
-  // Get statistics
-  const getStatistics = () => {
-    return Storage.getStatistics(getItemsForCurrentSite());
-  };
-
-  // Generate CSV export
-  const generateCSVExport = () => {
-    return Storage.generateCSV(getItemsForCurrentSite());
-  };
-
-  // Generate Excel export
-  const generateExcelExport = () => {
+  }, []);
+  
+  // Statistics
+  const getStatistics = useCallback(() => {
+    const items = getItemsForCurrentSite();
+    const totalItems = items.length;
+    const totalCarbon = items.reduce((sum, item) => sum + item.carbonValue, 0);
+    const averageCarbonPerItem = totalItems > 0 ? totalCarbon / totalItems : 0;
+    
+    const byCategory: Record<string, { count: number; carbon: number }> = {};
+    items.forEach(item => {
+      if (!byCategory[item.category]) {
+        byCategory[item.category] = { count: 0, carbon: 0 };
+      }
+      byCategory[item.category].count += 1;
+      byCategory[item.category].carbon += item.carbonValue;
+    });
+    
+    return { totalItems, totalCarbon, averageCarbonPerItem, byCategory };
+  }, [getItemsForCurrentSite]);
+  
+  // Export functions
+  const generateCSVExport = useCallback(() => {
     return Storage.generateExcelCSV(getItemsForCurrentSite());
-  };
-
+  }, [getItemsForCurrentSite]);
+  
+  const generateExcelExport = useCallback(() => {
+    return Storage.generateExcelCSV(getItemsForCurrentSite());
+  }, [getItemsForCurrentSite]);
+  
+  const generateDetailedExcelExport = useCallback(() => {
+    return Storage.generateDetailedExcelExport(getItemsForCurrentSite());
+  }, [getItemsForCurrentSite]);
+  
+  const exportToCSV = useCallback((filename?: string) => {
+    Storage.exportToCSV(getItemsForCurrentSite(), filename);
+  }, [getItemsForCurrentSite]);
+  
+  const exportToDetailedExcel = useCallback((filename?: string) => {
+    Storage.exportToDetailedExcel(getItemsForCurrentSite(), filename);
+  }, [getItemsForCurrentSite]);
+  
+  // Utility
+  const clearAllData = useCallback(() => {
+    Storage.clearAllData();
+    dispatch({ type: 'CLEAR_ALL' });
+  }, []);
+  
   const value: AppContextType = {
     state,
     dispatch,
     addItem,
     deleteItem,
-    setSite,
+    getItemsForCurrentSite,
+    currentSite,
+    setCurrentSite,
     startSession,
     endSession,
-    getItemsForCurrentSite,
     getStatistics,
     generateCSVExport,
     generateExcelExport,
+    generateDetailedExcelExport,
+    exportToCSV,
+    exportToDetailedExcel,
+    clearAllData,
   };
-
+  
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-// Custom hook to use the context
-export function useApp() {
+export function useAppContext() {
   const context = useContext(AppContext);
   if (context === undefined) {
-    throw new Error('useApp must be used within an AppProvider');
+    throw new Error('useAppContext must be used within an AppProvider');
   }
   return context;
 }

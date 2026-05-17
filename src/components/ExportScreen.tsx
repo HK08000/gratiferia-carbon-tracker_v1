@@ -1,108 +1,85 @@
-import React, { useState } from 'react';
-import { useApp } from '../hooks/useAppContext';
+import { useState } from 'react';
+import { useAppContext } from '../hooks/useAppContext';
+import { Download, FileText, FileSpreadsheet, ChevronLeft } from 'lucide-react';
 
-export default function ExportScreen() {
-  const { state, getItemsForCurrentSite, generateCSVExport, generateExcelExport } = useApp();
-  const [exportFormat, setExportFormat] = useState<'csv' | 'excel'>('csv');
-  const [showSuccess, setShowSuccess] = useState(false);
-
+export default function ExportScreen({ onBack }: { onBack: () => void }) {
+  const { generateCSVExport, generateDetailedExcelExport, exportToCSV, exportToDetailedExcel, getItemsForCurrentSite } = useAppContext();
+  const [exportFormat, setExportFormat] = useState<'csv' | 'excel' | 'detailed'>('detailed');
+  const [exported, setExported] = useState(false);
+  
   const items = getItemsForCurrentSite();
-
+  
   const handleExport = () => {
     if (items.length === 0) {
       alert('Aucun article à exporter. Veuillez d\'abord capturer des articles.');
       return;
     }
-
-    const content = exportFormat === 'excel'
-      ? generateExcelExport()
-      : generateCSVExport();
-
-    const fileName = `gratiferia_${state.currentSite?.name?.replace(/\s+/g, '_') || 'export'}_${new Date().toISOString().split('T')[0]}.${exportFormat === 'excel' ? 'csv' : 'csv'}`;
-
-    // Create and download file
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 2000);
-  };
-
-  const handleShare = async () => {
-    if (items.length === 0) {
-      alert('Aucun article à partager. Veuillez d\'abord capturer des articles.');
-      return;
+    
+    if (exportFormat === 'csv') {
+      exportToCSV(`gratiferia-export-${new Date().toISOString().split('T')[0]}.csv`);
+    } else if (exportFormat === 'detailed') {
+      exportToDetailedExcel(`gratiferia-detailed-${new Date().toISOString().split('T')[0]}.csv`);
     }
-
-    const content = generateCSVExport();
-
-    try {
-      await navigator.share({
-        title: 'Export Gratiferia',
-        text: `Export Gratiferia Carbon - ${state.currentSite?.name} - ${items.length} articles - ${state.items.reduce((sum, i) => sum + i.carbonValue, 0).toFixed(1)} kg CO₂eq`,
-        files: [
-          new File([content], `gratiferia_export.csv`, { type: 'text/csv' })
-        ]
-      });
-    } catch (error) {
-      // Fallback to regular download if sharing fails
-      handleExport();
-    }
+    
+    setExported(true);
+    setTimeout(() => setExported(false), 3000);
   };
-
-  if (showSuccess) {
+  
+  const getPreview = () => {
+    if (items.length === 0) return 'Aucune donnée à afficher';
+    
+    const totalCarbon = items.reduce((sum, item) => sum + item.carbonValue, 0);
+    const byCategory: Record<string, number> = {};
+    
+    items.forEach(item => {
+      byCategory[item.category] = (byCategory[item.category] || 0) + item.carbonValue;
+    });
+    
     return (
-      <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 bg-green-500 rounded-full flex items-center justify-center">
-            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-green-600 mb-2">Export réussi !</h2>
-          <p className="text-gray-600">Le fichier a été téléchargé</p>
+      <div className="space-y-3 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-600">Articles:</span>
+          <span className="font-medium">{items.length}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">Empreinte totale:</span>
+          <span className="font-medium text-green-600">{totalCarbon.toFixed(2)} kg CO2eq</span>
+        </div>
+        <div className="pt-2 border-t">
+          <div className="text-gray-600 mb-2">Par catégorie:</div>
+          {Object.entries(byCategory).map(([category, carbon]) => (
+            <div key={category} className="flex justify-between text-xs">
+              <span>{category}:</span>
+              <span>{carbon.toFixed(2)} kg</span>
+            </div>
+          ))}
         </div>
       </div>
     );
-  }
-
+  };
+  
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       {/* Header */}
-      <div className="bg-green-500 text-white p-4">
-        <h1 className="text-lg font-bold">Exporter les données</h1>
-        <p className="text-sm text-green-100">{state.currentSite?.name}</p>
-      </div>
-
-      <div className="p-4 max-w-lg mx-auto">
-        {/* Summary Card */}
-        <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
-          <h3 className="font-semibold text-gray-800 mb-4">Récapitulatif</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-4 bg-gray-50 rounded-xl">
-              <div className="text-2xl font-bold text-blue-600">{items.length}</div>
-              <div className="text-sm text-gray-500">Articles</div>
-            </div>
-            <div className="text-center p-4 bg-gray-50 rounded-xl">
-              <div className="text-2xl font-bold text-green-600">
-                {items.reduce((sum, i) => sum + i.carbonValue, 0).toFixed(1)}
-              </div>
-              <div className="text-sm text-gray-500">kg CO₂eq</div>
-            </div>
-          </div>
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="flex items-center gap-4 p-4">
+          <button 
+            onClick={onBack}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <h1 className="text-xl font-bold text-gray-800">Exporter les données</h1>
         </div>
-
-        {/* Format Selection */}
-        <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
-          <h3 className="font-semibold text-gray-800 mb-4">Format d'export</h3>
+      </div>
+      
+      <div className="p-4 space-y-6">
+        {/* Format selection */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <h2 className="font-semibold text-gray-800 mb-4">Format d'export</h2>
+          
           <div className="space-y-3">
+            {/* Option CSV simple */}
             <button
               onClick={() => setExportFormat('csv')}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
@@ -115,81 +92,92 @@ export default function ExportScreen() {
                 <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
                   exportFormat === 'csv' ? 'border-green-500' : 'border-gray-300'
                 }`}>
-                  {exportFormat === 'csv' && (
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                  )}
+                  {exportFormat === 'csv' && <div className="w-3 h-3 rounded-full bg-green-500"/>}
                 </div>
                 <div>
-                  <div className="font-medium text-gray-800">CSV</div>
-                  <div className="text-sm text-gray-500">Compatible avec tous les tableurs</div>
+                  <div className="font-medium text-gray-800 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    CSV Simple
+                  </div>
+                  <div className="text-sm text-gray-500">Export basique pour tableurs</div>
                 </div>
               </div>
             </button>
-
+            
+            {/* Option Excel détaillé - RECOMMANDÉE */}
             <button
-              onClick={() => setExportFormat('excel')}
+              onClick={() => setExportFormat('detailed')}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                exportFormat === 'excel'
+                exportFormat === 'detailed'
                   ? 'border-green-500 bg-green-50'
                   : 'border-gray-200 hover:border-green-300'
               }`}
             >
               <div className="flex items-center gap-3">
                 <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                  exportFormat === 'excel' ? 'border-green-500' : 'border-gray-300'
+                  exportFormat === 'detailed' ? 'border-green-500' : 'border-gray-300'
                 }`}>
-                  {exportFormat === 'excel' && (
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                  )}
+                  {exportFormat === 'detailed' && <div className="w-3 h-3 rounded-full bg-green-500"/>}
                 </div>
                 <div>
-                  <div className="font-medium text-gray-800">Excel (CSV UTF-8)</div>
-                  <div className="text-sm text-gray-500">Format compatible Excel avec accents</div>
+                  <div className="font-medium text-gray-800 flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    Excel Détaillé <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Recommandé</span>
+                  </div>
+                  <div className="text-sm text-gray-500">Avec statistiques, méthodologie ADEME et détails de calcul</div>
                 </div>
               </div>
             </button>
           </div>
         </div>
-
-        {/* Export Info */}
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <svg className="w-6 h-6 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="text-sm text-blue-700">
-              <p className="font-medium mb-1">L'export inclut :</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Nom et catégorie de l'article</li>
-                <li>Quantité et empreinte carbone</li>
-                <li>Méthode de calcul ADEME</li>
-                <li>Date et heure de capture</li>
-              </ul>
-            </div>
-          </div>
+        
+        {/* Preview */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <h2 className="font-semibold text-gray-800 mb-4">Aperçu des données</h2>
+          {getPreview()}
         </div>
-
-        {/* Export Buttons */}
-        <div className="space-y-3">
-          <button
-            onClick={handleExport}
-            className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Télécharger le fichier
-          </button>
-
-          <button
-            onClick={handleShare}
-            className="w-full py-4 bg-white hover:bg-gray-50 text-gray-700 font-semibold rounded-xl transition-all border-2 border-gray-200 hover:border-gray-300 flex items-center justify-center gap-2"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
-            Partager
-          </button>
+        
+        {/* What's included */}
+        {exportFormat === 'detailed' && (
+          <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
+            <h3 className="font-medium text-green-800 mb-3">📋 Ce fichier inclut :</h3>
+            <ul className="space-y-2 text-sm text-green-700">
+              <li>✓ Vue d'ensemble avec indicateurs clés</li>
+              <li>✓ Statistiques par catégorie (totaux, moyennes, pourcentages)</li>
+              <li>✓ Détail complet de chaque article avec facteur d'émission</li>
+              <li>✓ Tableau des facteurs d'émission ADEME utilisés</li>
+              <li>✓ Notes méthodologiques et source des données</li>
+              <li>✓ Encodage UTF-8 compatible Excel français</li>
+            </ul>
+          </div>
+        )}
+        
+        {/* Export button */}
+        <button
+          onClick={handleExport}
+          disabled={items.length === 0}
+          className={`w-full py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all ${
+            items.length === 0
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
+          }`}
+        >
+          <Download className="w-5 h-5" />
+          {exported ? '✓ Exporté !' : `Exporter ${items.length} article(s)`}
+        </button>
+        
+        {/* Success message */}
+        {exported && (
+          <div className="bg-green-100 border border-green-300 rounded-xl p-4 text-center text-green-800 animate-pulse">
+            ✓ Fichier téléchargé avec succès !
+          </div>
+        )}
+        
+        {/* Info note */}
+        <div className="text-center text-xs text-gray-500">
+          Les fichiers CSV s'ouvrent dans Excel, LibreOffice ou Google Sheets.
+          <br />
+          Pour Excel : utilisez "Données → À partir d'un fichier texte" si l'affichage n'est pas optimal.
         </div>
       </div>
     </div>
