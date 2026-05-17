@@ -7,7 +7,21 @@ const STORAGE_KEYS = {
   APP_STATE: 'gratiferia_app_state',
 };
 
-// Load data from localStorage with error handling
+// === REGISTRE DES SITES (noms lisibles pour l'export) ===
+export const SITE_NAMES: Record<string, string> = {
+  'iut-rcc-chalons': 'IUT RCC Chalons-en-Champagne',
+  'iut-reims': 'IUT Reims',
+  'urca-campus': 'URCA Campus',
+  'gratiferia-centre': 'Gratiferia Centre-Ville',
+  // Ajoutez vos sites ici : 'id-du-site': 'Nom affiché dans Excel',
+};
+
+// Fonction pour obtenir le nom lisible d'un site
+export function getSiteDisplayName(siteId: string): string {
+  return SITE_NAMES[siteId] || siteId;
+}
+
+// Load data from localStorage
 export function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
     const item = localStorage.getItem(key);
@@ -18,7 +32,7 @@ export function loadFromStorage<T>(key: string, defaultValue: T): T {
   }
 }
 
-// Save data to localStorage with error handling
+// Save data to localStorage
 export function saveToStorage<T>(key: string, value: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
@@ -27,138 +41,38 @@ export function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
-// Generate unique ID for items
+// Generate unique ID
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Generate CSV content from items - VERSION AMÉLIORÉE AVEC DÉTAILS
-export function generateCSV(items: Item[]): string {
-  const lines: string[] = [];
-  
-  // === EN-TÊTE AVEC INFORMATIONS GÉNÉRALES ===
-  lines.push('RAPPORT EMPREINTE CARBONE - GRATIFERIA');
-  lines.push(`Généré le: ${new Date().toLocaleString('fr-FR')}`);
-  lines.push(`Nombre total d'articles: ${items.length}`);
-  lines.push(`Empreinte carbone totale: ${items.reduce((sum, item) => sum + item.carbonValue, 0).toFixed(2)} kg CO2eq`);
-  lines.push('');
-  
-  // === RÉSUMÉ PAR CATÉGORIE ===
-  lines.push('RÉSUMÉ PAR CATÉGORIE');
-  lines.push('Catégorie;Nombre d\'articles;Quantité totale;Empreinte carbone (kg CO2eq);Pourcentage');
-  
-  const carbonByCategory: Record<string, { count: number; quantity: number; carbon: number }> = {};
-  
-  items.forEach(item => {
-    if (!carbonByCategory[item.category]) {
-      carbonByCategory[item.category] = { count: 0, quantity: 0, carbon: 0 };
-    }
-    carbonByCategory[item.category].count += 1;
-    carbonByCategory[item.category].quantity += item.quantity;
-    carbonByCategory[item.category].carbon += item.carbonValue;
-  });
-  
-  const totalCarbon = items.reduce((sum, item) => sum + item.carbonValue, 0);
-  
-  Object.entries(carbonByCategory).forEach(([category, data]) => {
-    const percentage = totalCarbon > 0 ? ((data.carbon / totalCarbon) * 100).toFixed(1) : '0';
-    lines.push(`${getCategoryLabel(category)};${data.count};${data.quantity};${data.carbon.toFixed(2)};${percentage}%`);
-  });
-  
-  lines.push(`TOTAL GENERAL;${items.length};;${totalCarbon.toFixed(2)};100%`);
-  lines.push('');
-  
-  // === DÉTAILS DES ARTICLES ===
-  lines.push('DÉTAILS DES ARTICLES');
-  const headers = [
-    'ID',
-    'Site',
-    'Catégorie',
-    'Nom de l\'article',
-    'Quantité',
-    'Facteur d\'émission (kg CO2eq/unité)',
-    'Empreinte carbone totale (kg CO2eq)',
-    'Méthode de calcul',
-    'Date de capture',
-    'Photo'
-  ];
-  lines.push(headers.join(';'));
-  
-  items.forEach(item => {
-    const emissionFactor = item.quantity > 0 ? (item.carbonValue / item.quantity).toFixed(4) : '0';
-    const date = new Date(item.timestamp).toLocaleString('fr-FR');
-    const row = [
-      item.id,
-      item.siteId,
-      getCategoryLabel(item.category),
-      `"${item.name.replace(/"/g, '""')}"`,
-      item.quantity,
-      emissionFactor,
-      item.carbonValue.toFixed(2),
-      `"${item.calculationMethod}"`,
-      date,
-      item.photoUri ? 'Oui' : 'Non'
-    ];
-    lines.push(row.join(';'));
-  });
-  
-  lines.push('');
-  
-  // === MÉTHODOLOGIE ===
-  lines.push('MÉTHODOLOGIE DE CALCUL');
-  lines.push('Les facteurs d\'émission sont basés sur la base ADEME (Agence de la Transition Écologique)');
-  lines.push('');
-  lines.push('Facteurs d\'émission utilisés:');
-  ADEME_FACTORS.forEach(factor => {
-    lines.push(`- ${factor.labelFr}: ${factor.emissionFactor} kg CO2eq par unité`);
-  });
-  
-  return lines.join('\n');
-}
-
-// Generate Excel-compatible CSV with BOM for proper UTF-8 encoding
-export function generateExcelCSV(items: Item[]): string {
-  const csv = generateCSV(items);
-  return '\uFEFF' + csv; // BOM pour Excel
-}
-
-// Generate detailed Excel export with multiple sections
+// === EXPORT DÉTAILLÉ EXCEL - VERSION AMÉLIORÉE ===
 export function generateDetailedExcelExport(items: Item[]): string {
   const lines: string[] = [];
   
-  // === SECTION 1: VUE D'ENSEMBLE ===
-  lines.push('=== VUE D\'ENSEMBLE ===');
-  lines.push('');
-  lines.push('Indicateurs clés');
-  lines.push(`Date d'export;${new Date().toLocaleString('fr-FR')}`);
-  lines.push(`Nombre total d'articles;${items.length}`);
-  
-  const totalCarbon = items.reduce((sum, item) => sum + item.carbonValue, 0);
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const uniqueSites = new Set(items.map(item => item.siteId)).size;
-  
-  lines.push(`Empreinte carbone totale;${totalCarbon.toFixed(2)} kg CO2eq`);
-  lines.push(`Quantité totale d'articles;${totalQuantity}`);
-  lines.push(`Nombre de sites;${uniqueSites}`);
-  lines.push(`Empreinte moyenne par article;${(totalCarbon / (items.length || 1)).toFixed(2)} kg CO2eq`);
-  lines.push(`Empreinte moyenne par unité;${(totalCarbon / (totalQuantity || 1)).toFixed(4)} kg CO2eq`);
+  // === EN-TÊTE ===
+  lines.push('RAPPORT EMPREINTE CARBONE - GRATIFERIA');
+  lines.push(`Généré le: ${new Date().toLocaleString('fr-FR')}`);
+  lines.push(`Nombre total d'articles: ${items.length}`);
   lines.push('');
   
-  // === SECTION 2: STATISTIQUES PAR CATÉGORIE ===
-  lines.push('=== STATISTIQUES PAR CATÉGORIE ===');
+  // === RÉSUMÉ PAR CATÉGORIE ===
+  lines.push('📊 RÉSUMÉ PAR CATÉGORIE');
   lines.push('');
   
   const statsByCategory: Record<string, { 
     count: number; 
     quantity: number; 
     carbon: number;
-    avgCarbonPerItem: number;
-    avgCarbonPerUnit: number;
+    percentage: number;
   }> = {};
   
+  let totalCarbon = 0;
+  
   items.forEach(item => {
+    totalCarbon += item.carbonValue;
     if (!statsByCategory[item.category]) {
-      statsByCategory[item.category] = { count: 0, quantity: 0, carbon: 0, avgCarbonPerItem: 0, avgCarbonPerUnit: 0 };
+      statsByCategory[item.category] = { count: 0, quantity: 0, carbon: 0, percentage: 0 };
     }
     statsByCategory[item.category].count += 1;
     statsByCategory[item.category].quantity += item.quantity;
@@ -166,86 +80,100 @@ export function generateDetailedExcelExport(items: Item[]): string {
   });
   
   Object.values(statsByCategory).forEach(stat => {
-    stat.avgCarbonPerItem = stat.carbon / (stat.count || 1);
-    stat.avgCarbonPerUnit = stat.carbon / (stat.quantity || 1);
+    stat.percentage = totalCarbon > 0 ? (stat.carbon / totalCarbon) * 100 : 0;
   });
   
-  lines.push('Catégorie;Articles;Quantité;Total CO2eq;Moyenne/article;Moyenne/unité;% du total');
+  lines.push('N°;Catégorie;Nombre d\'articles;Quantité totale;Empreinte (kg CO2eq);% du total');
   
-  Object.entries(statsByCategory).forEach(([category, stats]) => {
-    const percentage = totalCarbon > 0 ? ((stats.carbon / totalCarbon) * 100).toFixed(1) : '0';
-    lines.push(`${getCategoryLabel(category)};${stats.count};${stats.quantity};${stats.carbon.toFixed(2)};${stats.avgCarbonPerItem.toFixed(2)};${stats.avgCarbonPerUnit.toFixed(4)};${percentage}%`);
-  });
+  let lineNumber = 1;
+  Object.entries(statsByCategory)
+    .sort((a, b) => b[1].carbon - a[1].carbon)
+    .forEach(([category, stats]) => {
+      lines.push(`${lineNumber};${getCategoryLabel(category)};${stats.count};${stats.quantity};${stats.carbon.toFixed(2)};${stats.percentage.toFixed(1)}%`);
+      lineNumber++;
+    });
   
+  lines.push(`;TOTAL GÉNÉRAL;${items.length};;${totalCarbon.toFixed(2)};100%`);
+  lines.push('');
   lines.push('');
   
-  // === SECTION 3: DONNÉES COMPLÈTES PAR ARTICLE ===
-  lines.push('=== DONNÉES COMPLÈTES PAR ARTICLE ===');
+  // === DÉTAILS DES ARTICLES ===
+  lines.push('📋 DÉTAILS DES ARTICLES');
   lines.push('');
   
-  const headers = [
-    'ID Article',
-    'Site',
-    'Catégorie',
-    'Nom',
-    'Quantité',
-    'Facteur d\'émission (kg CO2eq/unité)',
-    'Empreinte totale (kg CO2eq)',
-    'Méthode de calcul',
-    'Date',
-    'Heure',
-    'Photo'
-  ];
-  lines.push(headers.join(';'));
+  lines.push('N°;Site;Catégorie;Nom de l\'article;Quantité;Empreinte unitaire (kg CO2eq);Empreinte totale (kg CO2eq);Date;Photo');
   
-  // Trier par date décroissante
   const sortedItems = [...items].sort((a, b) => b.timestamp - a.timestamp);
   
-  sortedItems.forEach(item => {
-    const date = new Date(item.timestamp);
-    const emissionFactor = item.quantity > 0 ? (item.carbonValue / item.quantity).toFixed(4) : '0';
-    const row = [
-      item.id,
-      item.siteId,
-      getCategoryLabel(item.category),
-      `"${item.name.replace(/"/g, '""')}"`,
-      item.quantity,
-      emissionFactor,
-      item.carbonValue.toFixed(2),
-      `"${item.calculationMethod}"`,
-      date.toLocaleDateString('fr-FR'),
-      date.toLocaleTimeString('fr-FR'),
-      item.photoUri ? 'Oui' : 'Non'
-    ];
-    lines.push(row.join(';'));
+  sortedItems.forEach((item, index) => {
+    const emissionFactor = item.quantity > 0 ? (item.carbonValue / item.quantity).toFixed(2) : '0';
+    const date = new Date(item.timestamp).toLocaleString('fr-FR');
+    const hasPhoto = item.photoUri ? 'Oui' : 'Non';
+    
+    lines.push(`${index + 1};${getSiteDisplayName(item.siteId)};${getCategoryLabel(item.category)};"${item.name.replace(/;/g, ',')}";${item.quantity};${emissionFactor};${item.carbonValue.toFixed(2)};${date};${hasPhoto}`);
   });
   
   lines.push('');
-  
-  // === SECTION 4: FACTEURS D'ÉMISSION ADEME ===
-  lines.push('=== FACTEURS D\'ÉMISSION ADEME ===');
   lines.push('');
-  lines.push('Catégorie;Facteur d\'émission (kg CO2eq/unité);Méthode;Description');
+  
+  // === STATISTIQUES CLÉS ===
+  lines.push('📈 STATISTIQUES CLÉS');
+  lines.push('');
+  lines.push('Indicateur;Valeur');
+  lines.push(`Nombre total d'articles;${items.length}`);
+  lines.push(`Quantité totale d'objets;${items.reduce((sum, item) => sum + item.quantity, 0)}`);
+  lines.push(`Empreinte carbone totale;${totalCarbon.toFixed(2)} kg CO2eq`);
+  lines.push(`Empreinte moyenne par article;${(totalCarbon / (items.length || 1)).toFixed(2)} kg CO2eq`);
+  lines.push(`Nombre de sites;${new Set(items.map(item => item.siteId)).size}`);
+  
+  if (items.length > 0) {
+    const maxCarbonItem = sortedItems.reduce((max, item) => item.carbonValue > max.carbonValue ? item : max, sortedItems[0]);
+    lines.push(`Article le plus impactant;"${maxCarbonItem.name}" (${maxCarbonItem.carbonValue.toFixed(2)} kg CO2eq)`);
+  }
+  
+  lines.push('');
+  lines.push('');
+  
+  // === FACTEURS D'ÉMISSION ===
+  lines.push('🌍 FACTEURS D\'ÉMISSION ADEME');
+  lines.push('');
+  lines.push('Catégorie;Facteur (kg CO2eq/unité)');
   
   ADEME_FACTORS.forEach(factor => {
-    lines.push(`${factor.labelFr};${factor.emissionFactor};${factor.calculationMethod};"${factor.description}"`);
+    lines.push(`${factor.labelFr};${factor.emissionFactor}`);
   });
   
   lines.push('');
+  lines.push('');
   
-  // === SECTION 5: NOTES MÉTHODOLOGIQUES ===
-  lines.push('=== NOTES MÉTHODOLOGIQUES ===');
-  lines.push('');
+  // === INFORMATIONS ===
+  lines.push('ℹ️ INFORMATIONS');
   lines.push('Source: Base Empreinte ADEME (Agence de la Transition Écologique)');
-  lines.push('Les facteurs d\'émission représentent l\'empreinte carbone moyenne par type d\'article');
-  lines.push('Calcul: Empreinte totale = Quantité × Facteur d\'émission');
-  lines.push('');
-  lines.push('Pour plus d\'informations: https://base-empreinte.ademe.fr');
+  lines.push('Méthode: Empreinte totale = Quantité × Facteur d\'émission');
+  lines.push(`Export généré par Gratiferia Carbon Tracker le ${new Date().toLocaleString('fr-FR')}`);
   
   return '\uFEFF' + lines.join('\n');
 }
 
-// Export functions for external use
+// === EXPORT CSV SIMPLE ===
+export function generateCSV(items: Item[]): string {
+  const lines: string[] = [];
+  
+  lines.push('N°;Site;Catégorie;Nom;Quantité;Empreinte totale (kg CO2eq);Date');
+  
+  items.forEach((item, index) => {
+    const date = new Date(item.timestamp).toLocaleString('fr-FR');
+    lines.push(`${index + 1};${getSiteDisplayName(item.siteId)};${getCategoryLabel(item.category)};"${item.name.replace(/;/g, ',')}";${item.quantity};${item.carbonValue.toFixed(2)};${date}`);
+  });
+  
+  return '\uFEFF' + lines.join('\n');
+}
+
+export function generateExcelCSV(items: Item[]): string {
+  return generateCSV(items);
+}
+
+// Download helper
 export function downloadFile(content: string, filename: string, mimeType: string = 'text/csv'): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -258,6 +186,7 @@ export function downloadFile(content: string, filename: string, mimeType: string
   URL.revokeObjectURL(url);
 }
 
+// Export functions
 export function exportToCSV(items: Item[], filename?: string): void {
   const csv = generateExcelCSV(items);
   const name = filename || `gratiferia-export-${new Date().toISOString().split('T')[0]}.csv`;
@@ -266,11 +195,11 @@ export function exportToCSV(items: Item[], filename?: string): void {
 
 export function exportToDetailedExcel(items: Item[], filename?: string): void {
   const csv = generateDetailedExcelExport(items);
-  const name = filename || `gratiferia-detailed-${new Date().toISOString().split('T')[0]}.csv`;
+  const name = filename || `gratiferia-detaille-${new Date().toISOString().split('T')[0]}.csv`;
   downloadFile(csv, name, 'text/csv;charset=utf-8;');
 }
 
-// Storage functions for app state
+// Storage functions
 export function getCurrentSite(): Site | null {
   return loadFromStorage<Site | null>(STORAGE_KEYS.CURRENT_SITE, null);
 }

@@ -18,7 +18,7 @@ export default function ExportScreen({ onBack }: { onBack: () => void }) {
     if (exportFormat === 'csv') {
       exportToCSV(`gratiferia-export-${new Date().toISOString().split('T')[0]}.csv`);
     } else if (exportFormat === 'detailed') {
-      exportToDetailedExcel(`gratiferia-detailed-${new Date().toISOString().split('T')[0]}.csv`);
+      exportToDetailedExcel(`gratiferia-detaille-${new Date().toISOString().split('T')[0]}.csv`);
     }
     
     setExported(true);
@@ -60,7 +60,6 @@ export default function ExportScreen({ onBack }: { onBack: () => void }) {
   
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="flex items-center gap-4 p-4">
           <button 
@@ -74,12 +73,10 @@ export default function ExportScreen({ onBack }: { onBack: () => void }) {
       </div>
       
       <div className="p-4 space-y-6">
-        {/* Format selection */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           <h2 className="font-semibold text-gray-800 mb-4">Format d'export</h2>
           
           <div className="space-y-3">
-            {/* Option CSV simple */}
             <button
               onClick={() => setExportFormat('csv')}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
@@ -104,7 +101,6 @@ export default function ExportScreen({ onBack }: { onBack: () => void }) {
               </div>
             </button>
             
-            {/* Option Excel détaillé - RECOMMANDÉE */}
             <button
               onClick={() => setExportFormat('detailed')}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
@@ -131,28 +127,25 @@ export default function ExportScreen({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         
-        {/* Preview */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           <h2 className="font-semibold text-gray-800 mb-4">Aperçu des données</h2>
           {getPreview()}
         </div>
         
-        {/* What's included */}
         {exportFormat === 'detailed' && (
           <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
             <h3 className="font-medium text-green-800 mb-3">📋 Ce fichier inclut :</h3>
             <ul className="space-y-2 text-sm text-green-700">
-              <li>✓ Vue d'ensemble avec indicateurs clés</li>
-              <li>✓ Statistiques par catégorie (totaux, moyennes, pourcentages)</li>
-              <li>✓ Détail complet de chaque article avec facteur d'émission</li>
-              <li>✓ Tableau des facteurs d'émission ADEME utilisés</li>
-              <li>✓ Notes méthodologiques et source des données</li>
+              <li>✓ Résumé par catégorie avec totaux et pourcentages</li>
+              <li>✓ Détail complet de chaque article (numéroté 1, 2, 3...)</li>
+              <li>✓ Nom du site lisible (ex: IUT RCC Chalons)</li>
+              <li>✓ Statistiques clés (moyennes, article le plus impactant)</li>
+              <li>✓ Tableau des facteurs d'émission ADEME</li>
               <li>✓ Encodage UTF-8 compatible Excel français</li>
             </ul>
           </div>
         )}
         
-        {/* Export button */}
         <button
           onClick={handleExport}
           disabled={items.length === 0}
@@ -166,14 +159,12 @@ export default function ExportScreen({ onBack }: { onBack: () => void }) {
           {exported ? '✓ Exporté !' : `Exporter ${items.length} article(s)`}
         </button>
         
-        {/* Success message */}
         {exported && (
           <div className="bg-green-100 border border-green-300 rounded-xl p-4 text-center text-green-800 animate-pulse">
             ✓ Fichier téléchargé avec succès !
           </div>
         )}
         
-        {/* Info note */}
         <div className="text-center text-xs text-gray-500">
           Les fichiers CSV s'ouvrent dans Excel, LibreOffice ou Google Sheets.
           <br />
